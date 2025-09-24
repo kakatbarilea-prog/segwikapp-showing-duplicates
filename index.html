@@ -134,7 +134,7 @@
       </div>
 
       
-<div class="swipe-note" style="
+<div id="swipeNote" class="swipe-note" style="
   margin:10px 16px;
   padding:10px 14px;
   background:#fff7e6;
@@ -149,6 +149,7 @@
   <span style="font-size:16px;">👉</span>
   <span>Swipe right to see more records.</span>
 </div>
+
 
 
       
@@ -240,26 +241,36 @@ function render(){
   const stage = document.getElementById('stage');
   current = dupeQueue[0] || null;
 
-  if(!current){
-    document.getElementById('badgeCurrent').textContent = `0 contact records`;
-    stage.innerHTML = `
-      <div class="group" style="margin:12px 16px;">
-        <div class="g-head">
-          <div class="g-left">
-            <div class="ico">✅</div>
-            <div>
-              <div class="g-sub">No potential duplicates right now.</div>
-            </div>
+if(!current){
+  document.getElementById('badgeCurrent').textContent = `0 contact records`;
+
+  // Hide the swipe note when there are no more dupes
+  const note = document.getElementById('swipeNote');
+  if(note) note.style.display = 'none';
+
+  stage.innerHTML = `
+    <div class="group" style="margin:12px 16px;">
+      <div class="g-head">
+        <div class="g-left">
+          <div class="ico">✅</div>
+          <div>
+            <div class="g-title">All caught up</div>
+            <div class="g-sub">No potential duplicates right now.</div>
           </div>
         </div>
-      </div>`;
-    return;
-  }
+      </div>
+    </div>`;
+  return;
+}
+
 
   document.getElementById('badgeCurrent').textContent =
     `${current.contacts.length} contact record${current.contacts.length>1?'s':''}`;
 
   stage.innerHTML = groupHTML(current);
+      const note = document.getElementById('swipeNote');
+if(note) note.style.display = 'flex';
+
 }
 
 /* ---------- Group view ---------- */
