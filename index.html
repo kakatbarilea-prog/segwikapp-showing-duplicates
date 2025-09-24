@@ -1,1 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Segwik AI – Duplicate Contacts Review</title>
+<style>
+  :root{
+    --bg:#f6f8fb; --card:#fff; --ink:#243048; --muted:#667085; --line:#e6ebf2;
+    --accent:#0F2D56; --btn:#1d305e; --pill:#eef4ff; --pill-border:#cfe1ff;
+    --phone-w:430px; --phone-h:800px; --success:#0B8A4E; --danger:#b42318;
+    --footer-h:76px; --status-h:46px; --head-h:52px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}
+  .wrap{display:flex;align-items:center;justify-content:center;min-height:100%;padding:18px}
 
+  /* Phone shell (consistent) */
+  .phone{width:var(--phone-w);height:var(--phone-h);background:#fff;border-radius:36px;
+    box-shadow:0 20px 60px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.08);position:relative;
+    overflow:hidden;border:8px solid #111;display:flex;flex-direction:column}
+  .notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:180px;height:30px;background:#111;border-radius:20px 20px 28px 28px;z-index:10}
+  .status{height:var(--status-h);padding:0 16px;display:flex;align-items:center;justify-content:center;gap:8px;border-bottom:1px solid var(--line);background:#fff;z-index:5}
+  .status .logo{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.3px}
+  .status .logo .bot{width:22px;height:22px;border-radius:50%;background:linear-gradient(145deg,#e9f0ff,#dfe9ff);display:grid;place-items:center;border:1px solid #c9d7ff}
+  .status .logo .bot::before{content:"";width:10px;height:6px;border-radius:3px;display:block;background:#0F2D56;box-shadow:0 0 0 2px #b7ccff inset}
+
+  /* Push notice (shared + Undo) */
+  .push-notice{
+    position:absolute; top:var(--status-h); left:50%;
+    transform:translateX(-50%) translateY(-120%); background:#0F2D56; color:#fff;
+    padding:8px 14px; border-radius:12px; font-size:13px; font-weight:600; opacity:0;
+    transition:transform .3s ease, opacity .3s ease; z-index:60;
+    box-shadow:0 10px 24px rgba(0,0,0,.15); white-space:nowrap; max-width:calc(100% - 40px);
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  .push-notice .undo{margin-left:10px; text-decoration:underline; cursor:pointer}
+  .push-notice.show{transform:translateX(-50%) translateY(0); opacity:1;}
+
+  .content{flex:1; overflow:auto; background:var(--bg);}
+  .page-head{position:sticky; top:0; z-index:4; background:#fff; border-bottom:1px solid var(--line)}
+  .page-title{height:var(--head-h); padding:12px 16px 8px; display:flex; align-items:center; justify-content:space-between}
+  .title-text{font-weight:800;color:var(--accent);font-size:18px}
+  .count-pill{padding:6px 12px;border:1px solid var(--pill-border);background:var(--pill);border-radius:999px;font-size:12px;min-width:96px;text-align:center;color:#21314f;font-weight:700}
+
+  /* Single-group stage area */
+  .stage{padding:10px 0 16px}
+  .group{margin:0 16px; background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
+  .g-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .g-left{display:flex;align-items:center;gap:10px}
+  .ico{width:36px;height:36px;border-radius:10px;background:#eef4ff;border:1px solid #cfe1ff;display:grid;place-items:center}
+  .g-sub{font-size:12px;color:var(--muted)}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;color:#4a5568;background:#f1f5f9;padding:2px 6px;border-radius:999px;border:1px solid #e2e8f0}
+  .chip.warn{background:#fff7e6;border-color:#ffe0a3;color:#7a5500}
+  .chip.badge{background:#eef4ff;border-color:#cfe1ff;color:#21314f;font-weight:700}
+
+  /* Horizontal contact carousel */
+  .carousel{
+    display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:2px;
+  }
+  .carousel::-webkit-scrollbar{height:6px}
+  .carousel::-webkit-scrollbar-thumb{background:#cfe1ff;border-radius:999px}
+  .slide{scroll-snap-align:center; flex:0 0 calc(100% - 8px)}
+  .c-card{border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px;display:grid;gap:8px}
+  .c-top{display:flex;gap:10px;align-items:center}
+  .ava{width:40px;height:40px;border-radius:50%;background:#dbe4ff;display:grid;place-items:center;font-weight:700;color:#0F2D56;border:1px solid #c8d4ff;font-size:14px}
+  .c-name{font-weight:800}
+  .c-meta{font-size:12px;color:#667085}
+  .field{font-size:13px}
+  .field b{color:#21314f}
+  .chips-row{display:flex;gap:6px;flex-wrap:wrap}
+  .small{font-size:12px;color:#475569}
+
+  /* Action buttons */
+  .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .cta{padding:8px 10px;border-radius:8px;border:1px solid var(--btn);background:var(--btn);color:#fff;font-size:12px;cursor:pointer;text-align:center}
+  .cta.ghost{background:#fff;color:#243048;border:1px solid #cbd5e1}
+  .cta.success{background:var(--success);border-color:var(--success)}
+  .cta.warn{background:#fff;color:#7a1a17;border:1px solid #f3b0ab}
+
+  /* Overlay / Sheet */
+  .overlay{position:absolute;inset:0;background:rgba(15,45,86,.25);display:none;align-items:flex-end;z-index:50}
+  .overlay.show{display:flex}
+  .sheet{width:min(560px,92vw);background:#fff;border:1px solid var(--pill-border);
+    border-radius:18px 18px 0 0;box-shadow:0 18px 40px rgba(15,45,86,.18);padding:14px;transform:translateY(100%);transition:transform .25s ease; max-height:82vh; overflow:auto;}
+  .overlay.show .sheet{transform:translateY(0)}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .sheet-title{font-weight:800;color:#0F2D56}
+  .x{width:28px;height:28px;border-radius:8px;border:1px solid var(--pill-border);background:#eef4ff;display:grid;place-items:center;cursor:pointer}
+
+  /* Manual merge table: N columns */
+  .m-row{display:grid; gap:8px; align-items:start; font-size:13px; border-bottom:1px dashed #e6ebf2; padding:8px 0}
+  .m-row:last-child{border-bottom:none}
+  .m-label{color:#475569;font-weight:700}
+  .m-opt{border:1px solid #e6ebf2;border-radius:10px;padding:8px}
+  .m-opt header{font-size:12px;color:#667085;margin-bottom:4px}
+  .m-ch{margin-top:6px}
+  .m-ch label{display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer}
+  .m-final{border:1px dashed #cfe1ff; border-radius:12px; padding:10px; background:#f7fbff}
+
+  /* Textareas: long + vertical-only */
+  textarea{width:100%; min-height:200px; border:1px solid #d3def0; border-radius:10px; padding:8px; font-size:13px; resize:vertical; overflow:auto}
+  #composeMsg{min-height:320px;}
+
+  /* Footer tray (consistent) */
+  .tray{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:8px;border-top:1px solid var(--line);background:#fff;position:sticky;bottom:0}
+  .ibtn{padding:8px;border:1px solid var(--line);border-radius:10px;background:#f8fafc;display:grid;place-items:center;font-size:11px;cursor:pointer}
+  .ibtn svg{width:17px;height:17px}
+  svg{stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="status">
+      <div class="logo"><span class="bot"></span><span>SEGWiK</span></div>
+    </div>
+
+    <div id="push" class="push-notice"></div>
+
+    <div class="content">
+      <div class="page-head">
+        <div class="page-title">
+          <div>
+            <div class="title-text">Potential Duplicates</div>
+            <div class="g-sub" style="padding-top:2px;">Review and merge contacts that look alike.</div>
+          </div>
+          <span class="count-pill" id="badgeCurrent">0 contact records</span>
+        </div>
+      </div>
+
+      
+<div class="swipe-note" style="
+  margin:10px 16px;
+  padding:10px 14px;
+  background:#fff7e6;
+  border:1px solid #ffe0a3;
+  border-radius:10px;
+  font-size:13px;
+  color:#7a5500;
+  display:flex;
+  align-items:center;
+  gap:6px;
+">
+  <span style="font-size:16px;">👉</span>
+  <span>Swipe right to see more records.</span>
+</div>
+
+
+      
+      <section class="stage" id="stage"></section>
+    </div>
+
+    <div class="tray" id="footer-tray">
+      <div class="ibtn" data-icon="phone"></div>
+      <div class="ibtn" data-icon="mail"></div>
+      <div class="ibtn" data-icon="chat"></div>
+      <div class="ibtn" data-icon="calendar"></div>
+      <div class="ibtn" data-icon="note"></div>
+    </div>
+
+    <!-- Manual Merge Overlay -->
+    <div id="mergeOverlay" class="overlay" onclick="overlayClose(event,'mergeOverlay')">
+      <div class="sheet" onclick="event.stopPropagation()">
+        <div class="sheet-head">
+          <div class="sheet-title" id="mergeTitle">Resolve Duplicates</div>
+          <div class="x" onclick="closeSheet('mergeOverlay')">×</div>
+        </div>
+        <div id="mergeBody"></div>
+        <div class="btns" style="justify-content:flex-end; margin-top:6px;">
+          <button class="cta ghost" onclick="closeSheet('mergeOverlay')">Cancel</button>
+          <button class="cta" onclick="applyManualMerge()">Merge Selected</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compose After-Merge (optional) -->
+    <div id="composeOverlay" class="overlay" onclick="overlayClose(event,'composeOverlay')">
+      <div class="sheet" onclick="event.stopPropagation()">
+        <div class="sheet-head">
+          <div class="sheet-title" id="composeTitle">Send a Quick Note?</div>
+          <div class="x" onclick="closeSheet('composeOverlay')">×</div>
+        </div>
+        <div class="small" id="composeTo"></div>
+        <div class="grid">
+          <label class="small" for="composeMsg">Message</label>
+          <textarea id="composeMsg"></textarea>
+        </div>
+        <div class="btns" style="justify-content:flex-end;">
+          <button class="cta ghost" onclick="closeSheet('composeOverlay')">Skip</button>
+          <button class="cta" onclick="sendCompose()">Send</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ---------- Sample potential dupes (first has 3 records) ---------- */
+let dupeQueue = [
+  {
+    gid: 'g1', confidence: 0.91,
+    hint: 'Name + company match. Emails vary; phones partially match.',
+    contacts: [
+      { id:'c1a', initials:'CR', name:'Carlos Ruiz', title:'Ops Manager', company:'GrantWorks', email:'carlos@grantworks.co', phone:'(732) 555-0142', linkedin:'linkedin.com/in/c-ruiz', tags:['Ops','Logistics'], lastTouchDays:18, address:'15 Elm St, Newark, NJ', notes:'Prefers morning calls.' },
+      { id:'c1b', initials:'CR', name:'Carlos A. Ruiz', title:'Operations Manager', company:'GrantWorks', email:'c.ruiz@grantworks.co', phone:'(732) 555-0142', linkedin:'', tags:['Operations'], lastTouchDays:42, address:'', notes:'' },
+      { id:'c1c', initials:'CR', name:'C. Ruiz', title:'Ops', company:'GrantWorks', email:'ruiz.carlos@grantworks.co', phone:'732-555-0142', linkedin:'', tags:[], lastTouchDays:120, address:'', notes:'Old import from spreadsheet.' }
+    ]
+  },
+  {
+    gid: 'g2', confidence: 0.86,
+    hint: 'Name + email match. Company/title missing in one.',
+    contacts: [
+      { id:'c2a', initials:'SG', name:'Sophia Gomez', title:'Event Planner', company:'Gomez Events', email:'sophia@gomezevents.co', phone:'(732) 555-0112', linkedin:'linkedin.com/in/sophiag', tags:['Events','Venues'], lastTouchDays:7, address:'', notes:'Asked for venue checklist.' },
+      { id:'c2b', initials:'SG', name:'S. Gomez', title:'', company:'', email:'sophia@gomezevents.co', phone:'', linkedin:'', tags:[], lastTouchDays:120, address:'PO Box 25, Red Bank, NJ', notes:'' }
+    ]
+  },
+  {
+    gid: 'g3', confidence: 0.77,
+    hint: 'Phone match; emails differ; possible personal vs work.',
+    contacts: [
+      { id:'c3a', initials:'JP', name:'Janelle Park', title:'Marketing Lead', company:'Beacon Labs', email:'janelle@beaconlabs.io', phone:'(908) 555-0161', linkedin:'linkedin.com/in/jpark', tags:['B2B','Email'], lastTouchDays:30, address:'', notes:'' },
+      { id:'c3b', initials:'JP', name:'Janelle Park', title:'', company:'', email:'janelle.park@gmail.com', phone:'(908) 555-0161', linkedin:'', tags:['Personal'], lastTouchDays:400, address:'', notes:'Met at local meetup years ago.' }
+    ]
+  }
+];
+
+let current = null;       // currently displayed group
+let lastUndo = null;      // { actionLabel, restoreFn }
+let currentMerge = null;  // manual merge context
+let lastComposedTo = null;
+
+/* ---------- Render: show exactly one group (the first in queue) ---------- */
+function render(){
+  const stage = document.getElementById('stage');
+  current = dupeQueue[0] || null;
+
+  if(!current){
+    document.getElementById('badgeCurrent').textContent = `0 contact records`;
+    stage.innerHTML = `
+      <div class="group" style="margin:12px 16px;">
+        <div class="g-head">
+          <div class="g-left">
+            <div class="ico">✅</div>
+            <div>
+              <div class="g-sub">No potential duplicates right now.</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('badgeCurrent').textContent =
+    `${current.contacts.length} contact record${current.contacts.length>1?'s':''}`;
+
+  stage.innerHTML = groupHTML(current);
+}
+
+/* ---------- Group view ---------- */
+function groupHTML(g){
+  return `
+  <div class="group" id="group-${g.gid}">
+    <div class="g-head">
+      <div class="g-left">
+        <div class="ico">👥</div>
+        <div>
+          <!-- Removed the 'Possible Duplicate' heading per request -->
+          <div class="g-sub">Match confidence: ${(g.confidence*100).toFixed(0)}% • ${g.hint}</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="carousel">
+      ${g.contacts.map(c=>`<div class="slide">${contactCard(c)}</div>`).join('')}
+    </div>
+
+    <div class="btns">
+      <button class="cta" onclick="autoMerge('${g.gid}')">Auto-Merge Safe Fields</button>
+      <button class="cta ghost" onclick="openManualMerge('${g.gid}')">Review & Merge</button>
+      <button class="cta ghost" onclick="settleGroup('${g.gid}','Marked as not a duplicate.')">Not a Duplicate</button>
+      <button class="cta warn" onclick="settleGroup('${g.gid}','Snoozed for 30 days.')">Snooze 30 Days</button>
+    </div>
+  </div>`;
+}
+function contactCard(c){
+  return `
+  <div class="c-card">
+    <div class="c-top">
+      <div class="ava">${c.initials||'?'}</div>
+      <div>
+        <div class="c-name">${c.name||'—'}</div>
+        <div class="c-meta">${c.title||''}${c.company?` @ ${c.company}`:''}</div>
+      </div>
+    </div>
+
+    <div class="field"><b>Email:</b> ${c.email||'<i>none</i>'}</div>
+    <div class="field"><b>Phone:</b> ${c.phone||'<i>none</i>'}</div>
+    <div class="field"><b>LinkedIn:</b> ${c.linkedin?`<a href="https://${c.linkedin}" target="_blank" rel="noopener">${c.linkedin}</a>`:'<i>none</i>'}</div>
+    ${c.address?`<div class="field"><b>Address:</b> ${c.address}</div>`:''}
+    ${c.tags?.length?`<div class="chips-row">${c.tags.map(t=>`<span class="chip">${t}</span>`).join('')}</div>`:''}
+    ${missingChips(c)}
+    <div class="small">Last touch: ${c.lastTouchDays ?? '—'} days ago</div>
+  </div>`;
+}
+function missingChips(c){
+  const lacks = [];
+  if(!c.email) lacks.push('Missing email');
+  if(!c.phone) lacks.push('Missing phone');
+  if(!c.company) lacks.push('Missing company');
+  if(!c.title) lacks.push('Missing title');
+  return lacks.length ? `<div class="chips-row">${lacks.map(x=>`<span class="chip warn">${x}</span>`).join('')}</div>` : '';
+}
+
+/* ---------- Settle group + Undo ---------- */
+function settleGroup(gid, message){
+  const idx = dupeQueue.findIndex(x=>x.gid===gid);
+  if(idx<0) return;
+  const removed = dupeQueue.splice(idx,1)[0];
+
+  lastUndo = {
+    actionLabel: message,
+    restoreFn: ()=>{
+      dupeQueue.unshift(removed);
+      lastUndo = null;
+      render();
+    }
+  };
+
+  render();
+  showPushWithUndo(message);
+}
+
+/* ---------- Auto-merge ---------- */
+function autoMerge(gid){
+  const g = dupeQueue.find(x=>x.gid===gid);
+  if(!g) return;
+
+  const merged = safeMergeMany(g.contacts);
+  const hasEmail = !!merged.email;
+
+  settleGroup(gid, 'Auto-merged safe fields.');
+
+  if(hasEmail){
+    setTimeout(()=> openCompose(merged.name||'Contact', merged.email, merged), 400);
+  }
+}
+
+/* ---------- Manual Merge (supports N contacts) ---------- */
+function openManualMerge(gid){
+  const g = dupeQueue.find(x=>x.gid===gid);
+  if(!g) return;
+  currentMerge = { gid, contacts: g.contacts };
+  document.getElementById('mergeTitle').textContent =
+    `Resolve Duplicates — ${g.contacts.map(c=>c.name).slice(0,3).join(' • ')}${g.contacts.length>3?'…':''}`;
+  document.getElementById('mergeBody').innerHTML = manualMergeHTML(g.contacts);
+  showSheet('mergeOverlay');
+}
+function manualMergeHTML(list){
+  const fields = ['name','title','company','email','phone','linkedin','address','notes'];
+  const cols = list.length;
+  const rows = fields.map(key=>mergeRowN(key, labelOf(key), list)).join('');
+  const finalNote = smartMergeNoteN(list);
+
+  return `
+    <div class="m-final small">Choose a value per field. We’ll keep tags combined and keep the most recent “last touch”.</div>
+    ${rows}
+    <div class="m-row" style="grid-template-columns:130px repeat(${cols}, 1fr);">
+      <div class="m-label">Tags</div>
+      ${list.map((c,i)=>`<div class="m-opt"><header>${alpha(i)}</header>${(c.tags||[]).join(', ')||'<i>none</i>'}</div>`).join('')}
+    </div>
+    <div class="m-row" style="grid-template-columns:130px 1fr;">
+      <div class="m-label">Final Note</div>
+      <div class="m-opt">
+        <textarea id="mergeNote">${finalNote}</textarea>
+      </div>
+    </div>`;
+}
+function mergeRowN(key,label,list){
+  const cols = list.length;
+  return `
+    <div class="m-row" style="grid-template-columns:130px repeat(${cols}, 1fr);">
+      <div class="m-label">${label}</div>
+      ${list.map((c,i)=>{
+        const id = `pick-${key}-${i}`;
+        return `
+        <div class="m-opt">
+          <header>${alpha(i)}</header>
+          <div>${displayField(key, c[key]||'')}</div>
+          <div class="m-ch"><label><input type="radio" name="pick-${key}" id="${id}" value="${i}"> Use ${alpha(i)}</label></div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+function labelOf(key){
+  return ({name:'Name', title:'Title', company:'Company', email:'Email', phone:'Phone', linkedin:'LinkedIn', address:'Address', notes:'Notes'})[key] || key;
+}
+function alpha(i){ return String.fromCharCode(65+i); }
+function displayField(key,val){
+  if(!val) return '<i>empty</i>';
+  if(key==='linkedin' && val) return `<a href="https://${val}" target="_blank" rel="noopener">${val}</a>`;
+  return val.replace?.(/</g,'&lt;').replace?.(/>/g,'&gt;') || val;
+}
+function applyManualMerge(){
+  if(!currentMerge) return;
+  const list = currentMerge.contacts;
+  const fields = ['name','title','company','email','phone','linkedin','address','notes'];
+  const res = {};
+  fields.forEach(k=>{
+    const set = document.querySelector(`input[name="pick-${k}"]:checked`);
+    if(set){
+      const idx = parseInt(set.value,10);
+      res[k] = list[idx][k] || '';
+    }else{
+      res[k] = pickSafeMany(list.map(c=>c[k]));
+    }
+  });
+  const tags = new Set();
+  let lastTouch = Infinity;
+  list.forEach(c=>{
+    (c.tags||[]).forEach(t=>tags.add(t));
+    if(typeof c.lastTouchDays==='number') lastTouch = Math.min(lastTouch, c.lastTouchDays);
+  });
+  res.tags = [...tags];
+  res.lastTouchDays = isFinite(lastTouch) ? lastTouch : undefined;
+  const note = document.getElementById('mergeNote')?.value || '';
+  if(note) res.notes = note;
+
+  closeSheet('mergeOverlay');
+
+  const gid = currentMerge.gid;
+  settleGroup(gid, 'Contacts merged.');
+  if(res.email){
+    setTimeout(()=> openCompose(res.name||'Contact', res.email, res), 400);
+  }
+  currentMerge = null;
+}
+
+/* ---------- Safe merge helpers (many) ---------- */
+function pickSafeMany(values){
+  const nonEmpty = values.filter(v=>v && String(v).trim()!=='');
+  if(!nonEmpty.length) return '';
+  return nonEmpty.reduce((a,b)=> String(b).length>String(a).length?b:a);
+}
+function safeMergeMany(list){
+  const fields = ['name','title','company','email','phone','linkedin','address','notes'];
+  const r = {};
+  fields.forEach(k=> r[k] = pickSafeMany(list.map(c=>c[k])));
+  const tags = new Set();
+  let lastTouch = Infinity;
+  list.forEach(c=>{
+    (c.tags||[]).forEach(t=>tags.add(t));
+    if(typeof c.lastTouchDays==='number') lastTouch = Math.min(lastTouch, c.lastTouchDays);
+  });
+  r.tags = [...tags];
+  r.lastTouchDays = isFinite(lastTouch) ? lastTouch : undefined;
+  return r;
+}
+function smartMergeNoteN(list){
+  const names = list.map(c=>c.name).filter(Boolean).join(' • ');
+  const company = pickSafeMany(list.map(c=>c.company));
+  const title = pickSafeMany(list.map(c=>c.title));
+  const hooks = [company ? `re: ${company}` : '', title || ''].filter(Boolean).join(' • ');
+  return `Merged profiles for ${names}.${hooks ? ' '+hooks+'.' : ''} Combined tags and kept clearest contact details.\n\nInternal: schedule next touch in ~2 weeks.`;
+}
+
+/* ---------- Compose after merge (optional) ---------- */
+function openCompose(name, email, merged=null){
+  lastComposedTo = {name, email, merged};
+  document.getElementById('composeTitle').textContent = 'Send a Quick Note?';
+  document.getElementById('composeTo').textContent = `${name} • ${email}`;
+  document.getElementById('composeMsg').value = defaultComposeMsg(name, merged);
+  showSheet('composeOverlay');
+}
+function defaultComposeMsg(name, merged){
+  const first = (name||'').split(' ')[0]||'there';
+  const company = merged?.company ? ` at ${merged.company}`:'';
+  return `Hi ${first},
+
+I came across your profile in the app I’m using and realized there were a few duplicate entries for you${company}. I cleaned it up on my side—anyway, how are you? If you’re open to it, I’d love to catch up for 15–20 minutes next week.
+
+Best,
+[from_firstname] [from_lastname]`;
+}
+function sendCompose(){
+  closeSheet('composeOverlay');
+  if(lastComposedTo){
+    showPush(`Email sent to ${lastComposedTo.name}.`);
+  }
+  lastComposedTo = null;
+}
+
+/* ---------- UI helpers ---------- */
+function showSheet(id){ document.getElementById(id).classList.add('show'); }
+function closeSheet(id){ document.getElementById(id).classList.remove('show'); }
+function overlayClose(e,id){ if(e.target.id===id) closeSheet(id); }
+
+function icon(name){
+  switch(name){
+    case 'mail': return `<svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></svg>`;
+    case 'phone': return `<svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0  0 1 4.11 2h3a2 2 0  0 1 2 1.72c.12.9.3 1.77.57 2.61a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0  0 0 6 6l1.47-1.11a2 2 0 0 1 2.11-.45c.84.27 1.71.45 2.61.57A2 2 0 0 1 22 16.92z"/></svg>`;
+    case 'chat': return `<svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0  0 1 4 4z"/></svg>`;
+    case 'calendar': return `<svg viewBox="0 0 24 24"><path d="M3 8h18M5 4h14v16H5z"/><path d="M16 2v4M8 2v4"/></svg>`;
+    case 'note': return `<svg viewBox="0 0 24 24"><path d="M4 3h14l2 2v16H4z"/><path d="M9 13h6M9 9h6M9 17h3"/></svg>`;
+  }
+}
+(function populateFooterIcons(){
+  document.querySelectorAll('#footer-tray [data-icon]').forEach(el=>{
+    const name=el.getAttribute('data-icon');
+    el.innerHTML = icon(name) || '';
+  });
+})();
+
+/* Push with optional Undo (consistent UI) */
+function showPush(text){
+  const el = document.getElementById('push');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(showPush._t);
+  showPush._t = setTimeout(()=>el.classList.remove('show'), 2300);
+}
+function showPushWithUndo(text){
+  const el = document.getElementById('push');
+  el.innerHTML = `${text} <span class="undo" onclick="undoLast()">Undo</span>`;
+  el.classList.add('show');
+  clearTimeout(showPushWithUndo._t);
+  showPushWithUndo._t = setTimeout(()=>el.classList.remove('show'), 3200);
+}
+function undoLast(){
+  const el = document.getElementById('push');
+  if(lastUndo && typeof lastUndo.restoreFn==='function'){
+    lastUndo.restoreFn();
+    el.textContent = 'Undone.';
+    clearTimeout(showPushWithUndo._t);
+    showPushWithUndo._t = setTimeout(()=>el.classList.remove('show'), 1600);
+  }
+}
+
+/* ---------- Init ---------- */
+render();
+</script>
+</body>
+</html>
